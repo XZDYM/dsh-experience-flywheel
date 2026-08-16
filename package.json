@@ -1,0 +1,11 @@
+{
+  "name": "dsh-experience-flywheel",
+  "version": "0.1.0-dev",
+  "description": "dsh-experience-flywheel · DSH 经验飞轮插件 — agent cross-session experience memory + dual-acceptance gates (auto query/inject via agent/pre-step middleware; exit-1 gate scripts)",
+  "main": "lib/index.js",
+  "type": "module",
+  "files": ["lib", "scripts", "store", "SKILL.md", "cordis.patch.yml"],
+  "keywords": ["dsh", "dsh-plugin", "deepseek-harness", "agent-memory", "flywheel", "experience", "gate", "verification"],
+  "dsh": { "bundle": { "patch": "./cordis.patch.yml" } },
+  "dependencies": {}
+}

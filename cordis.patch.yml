@@ -1,0 +1,25 @@
+# dsh-experience-flywheel bundle patch
+# Inserts one service that registers the agent/pre-step + tools/post-execute
+# middlewares and slash commands. Installed via:
+#   dsh plugin --profile web add github:<owner>/dsh-experience-flywheel
+# Applies after dsh-base + dsh-web-app layers; last-write-wins on row ids.
+- insert:
+    - id: experience-flywheel
+      name: 'dsh-experience-flywheel'
+      config:
+        # 后端：'auto' = OPENVIKING_URL 非空走向量，否则本地 markdown
+        backend: auto
+        # 本地 markdown 经验库根（相对插件包根）
+        storePath: ./store
+        # OpenViking 端点；留空则用 markdown。也可读环境变量 OPENVIKING_URL
+        openvikingUrl: ''
+        # actor-peer（OpenViking 写入用），默认 'dsh'
+        openvikingPeer: dsh
+        # 日志目录（留空 → 插件包下 logs/）
+        logDir: ''
+        # pre-step 自动查经验注入的命中条数上限
+        injectTopK: 3
+        # 是否注册闸门 slash 命令（/plan-gate /close-gate /verify /flywheel-*）
+        registerCommands: true
+        # 是否启用 tools/post-execute 自动校核
+        autoVerify: true

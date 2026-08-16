@@ -1,0 +1,9 @@
+﻿node_modules/
+logs/
+acceptance/
+store/patterns/mem_*.md
+store/entities/
+store/preferences/
+store/experiences/
+*.log
+.DS_Store
