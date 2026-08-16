@@ -34,6 +34,7 @@ dsh-experience-flywheel/
 │  ├─ index.js             # 服务主入口：注册 pre-step / post-execute 中间件 + 命令 + 工具
 │  ├─ store.js             # 后端抽象：markdown-folder（默认）/ openviking（可选）
 │  ├─ gates.js             # 闸门脚本运行器（spawn powershell，吃 exit code）
+│  ├─ claims.js            # F2 claims 治理：上限 / TTL / PASS 后移除（纯函数，可单测）
 │  └─ search.js            # 经验查询/回读（后端无关）
 ├─ scripts/                # 可移植闸门脚本（exit-1 的确定性真相，零依赖，PowerShell）
 │  ├─ ov-search.ps1        # 查经验（markdown 全文/可选 OV 向量）
@@ -110,12 +111,15 @@ class OpenVikingStore // POST /api/v1/search/search；remember 走 content/write
 
 ## 7. 测试 / 验收计划（幂等探针不能少）
 
-`test/probe.ps1`（只读、可重复、不动交付物）：
+`test/probe.ps1`（只读、可重复、不动交付物，当前 12 项全 PASS，全两遍一致）：
 1. plan-gate：喂"缺验收员"的计划文件 → 期望 exit 1；喂"有验收员"→ 期望 exit 0。跑两遍结果一致。
 2. verify-claims：声称一个不存在文件 → exit 1；声称真实存在 → exit 0。两遍一致。
 3. ov-remember + ov-search：remember 一条 → search 应命中同名。两遍（第二次同名覆盖）不产生副作用。
-4. store 抽象：markdown 后端 search/remember 闭环；OpenViking 后端（若有 URL）同样。
-5. 真实安装探针：在干净临时 profile 里 `dsh plugin add` 本目录 → 启动 → pre-step 注入 system 消息出现。
+4. D1/D2 回归：中文 bigram 检索命中；零声明（`;;;`）exit 2 防假绿。
+5. F2 回归：claims.js 纯函数单测——上限淘汰最旧 / TTL 清理过期 / PASS 移除已验证 / 重复 add 幂等。两遍一致。
+6. close-gate：三全 PASS；缺飞轮留痕 FAIL。
+7. store 抽象：markdown 后端 search/remember 闭环；OpenViking 后端（若有 URL）同样。
+8. 真实安装探针：在干净临时 profile 里 `dsh plugin add` 本目录 → 启动 → pre-step 注入 system 消息出现。
 
 交付前：`verify-claims.ps1` 校核所有声称产物存在；双验收 subagent（A 对照 + B 红队）独立复跑探针。
 
@@ -141,13 +145,14 @@ class OpenVikingStore // POST /api/v1/search/search；remember 走 content/write
 - [x] 骨架：package.json / cordis.patch.yml / README / SKILL
 - [x] lib/index.js + store.js + search.js + gates.js + cli.mjs（store 双后端 name 统一剥 mem_ 前缀）
 - [x] scripts/*.ps1（5 个，UTF-8 BOM 必带——PS5.1 无 BOM 按 ANSI 读中文会炸）
-- [x] test/probe.ps1 幂等探针（9/9 PASS，全两遍一致）
+- [x] test/probe.ps1 幂等探针（12/12 PASS，全两遍一致）
 - [x] 真实安装探针：临时 profile flywheel-probe + headless + 审计日志验证 INJECT + 模型遵循注入 ✅
 - [x] 沉淀安装探针抓到的坑（mem_dsh_20260816_plugin_prestep_messages_contract）
 - [x] 双验收：第1轮 A=PASS/B=FAIL(§11 抓 5 问题) → 返工修复 → 第2轮 **A=PASS/B=PASS 双 PASS**
 - [x] 合成/分解谬误自检（§11，红队专跑，C1-C6/D1-D4 全 PASS）
 - [x] team-close-gate + 插件 close-gate 双 PASS + verify-claims PASS
-- [ ] git push + topic dsh-plugin（需用户 GitHub 操作）
+- [x] git push + topic dsh-plugin（已发布 v0.1.0，commit 37a0307）
+- [x] **F2 claims 治理**（2026-08-16 收尾迭代）：lib/claims.js 纯函数 + index.js 接入 + 探针 §3d 单测 4 项 → 12/12 PASS，已随 v0.1.0+ 提交
 
 ## 10b. 安装探针实战结论（2026-08-16，真实踩坑记录）
 
@@ -166,10 +171,10 @@ class OpenVikingStore // POST /api/v1/search/search；remember 走 content/write
 ### 双验收阶段发现（2026-08-16，§11 D2/D4 类）
 7. **verify-claims 零声明假绿**：`-Claims ";;;"`（有效声明数 0）原实现返回 exit 0 "0 项全部验证通过"——假 PASS。已修：声明数 0 → **exit 2**（无内容可校核即参数错误），防 D2/D4 假绿。回归探针仍 9/9 PASS。
 
-### 双验收第 2 轮（2026-08-16）——双 PASS 达成，附 2 条非阻断后续优化
-第 1 轮红队 FAIL 的 C1/C2/C3/D1/D4 + C4 全部修复并复验通过（行号证据见 acceptance/verdict-B.md）。红队第 2 轮另提 2 条**架构层优化建议（不影响当前版本发布，列为后续迭代）**：
+### 双验收第 2 轮（2026-08-16）——双 PASS 达成，附 2 条后续优化（F2 已修，F1 待办）
+第 1 轮红队 FAIL 的 C1/C2/C3/D1/D4 + C4 全部修复并复验通过（行号证据见 acceptance/verdict-B.md）。红队第 2 轮另提 2 条**架构层优化建议**：
 - **F1 搜索子串噪声**：MarkdownStore.search 用 `includes` 子串匹配，bigram 只缓解了查询端；文档端子串命中仍有噪声（"经验"命中"经验库/经验主义"）。后续可选：文档端也建 bigram 交集打分 / nodejieba 分词 / 结构化作弊字段走 OpenViking。
-- **F2 claims 累积不清**：claimsByAgent 只增不清，长会话验证集合无限增长、重复校验历史文件。后续：verify 通过后从集合移除已验证路径，或设上限（如 50）/TTL（如 24h）。
+- **F2 claims 累积不清**：~~claimsByAgent 只增不清，长会话验证集合无限增长、重复校验历史文件~~ → **已修（v0.1.0+）**：抽 `lib/claims.js` 纯函数治理（探针可单测）——verify PASS 后移除已验证路径；上限 `maxClaimsPerAgent`（默认 50，最旧先淘汰）；TTL `claimsTtlMs`（默认 24h，过期清理）。实现见 lib/claims.js + lib/index.js post-execute；回归探针 §3d 单测 4 项（上限/TTL/PASS移除/幂等重加）两遍一致。
 
 ## 11. 合成谬误 / 分解谬误自检（交付前强制，老李 2026-08-16 拍板）
 

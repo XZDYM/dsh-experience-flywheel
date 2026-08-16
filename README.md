@@ -9,7 +9,7 @@
 > 写完文件**自动**校核"声称写了"是否真写了,并把确定性的 exit-1 闸门脚本
 > (plan-gate / close-gate / verify-claims)包成 slash 命令。
 >
-> Status: **WIP / 开发中** — see [DESIGN.md](./DESIGN.md).
+> Status: **v0.1.0 released** — see [DESIGN.md](./DESIGN.md).
 
 ## Why / 为什么造它
 Pure-text LLM agents wake up fresh every session: yesterday's pitfalls, preferences,
@@ -21,6 +21,9 @@ experience query every turn **without the model choosing to**, the same seam
 ## How / 怎么工作
 - `ctx.on("agent/pre-step")` → auto query store, inject top-K hits as a system message.
 - `ctx.on("tools/post-execute")` → after file-write tools, auto-run `verify-claims`.
+- **Claims hygiene (F2)**: per-agent claimed-write set is bounded — verified paths are
+  removed after a PASS, capped at `maxClaimsPerAgent` (default 50), and pruned by
+  `claimsTtlMs` (default 24h), so long sessions never re-verify history forever.
 - slash commands `/flywheel-search` `/flywheel-remember` `/plan-gate` `/close-gate` `/verify` wrap exit-1 scripts.
 - **Backend**: local markdown folder by default (zero deps); set `OPENVIKING_URL` to upgrade to vector retrieval.
 - **Honest limit (软硬)**: rc.6 event listeners that throw are warned, not fatal — a true

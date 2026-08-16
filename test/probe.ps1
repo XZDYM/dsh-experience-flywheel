@@ -80,6 +80,48 @@ try {
     & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $scripts "verify-claims.ps1") -Claims ';;;' -LogDir $logs | Out-Null
     Check "D2 零声明 exit=2 (防假绿)" ($LASTEXITCODE -eq 2)
 
+    # ── 3d) F2 回归: claims 治理纯函数（上限/TTL/PASS 移除/幂等）──
+    # 直接 node 跑 lib/claims.js，不装 harness；两遍结果一致。
+    $claimsNode = Join-Path $work "claims-probe.mjs"
+    @"
+import { createClaims, addClaim, pruneClaims, listClaims, removeClaims, claimsSize } from "file:///$(($root -replace '\\','/'))/lib/claims.js";
+let fails = 0;
+const ck = (label, ok) => { if (!ok) { console.error("CLAIMS-FAIL: " + label); fails++; } };
+
+// 1) 上限淘汰最旧
+const c1 = createClaims({ max: 3, ttlMs: 60000 });
+addClaim(c1, "a"); addClaim(c1, "b"); addClaim(c1, "c"); addClaim(c1, "d");
+ck("cap evicts oldest (size=3, got " + claimsSize(c1) + ")", claimsSize(c1) === 3);
+ck("cap keeps newest (b,c,d)", JSON.stringify(listClaims(c1)) === JSON.stringify(["b","c","d"]));
+
+// 2) TTL 过期清理
+const c2 = createClaims({ max: 50, ttlMs: 1000 });
+addClaim(c2, "old", Date.now() - 5000);
+addClaim(c2, "fresh");
+const pruned = pruneClaims(c2);
+ck("ttl prunes stale (pruned=" + pruned + ")", pruned === 1);
+ck("ttl keeps fresh", claimsSize(c2) === 1 && listClaims(c2)[0] === "fresh");
+
+// 3) PASS 后移除已验证路径
+const c3 = createClaims({ max: 50, ttlMs: 60000 });
+addClaim(c3, "x"); addClaim(c3, "y");
+removeClaims(c3, ["x"]);
+ck("remove verified path", claimsSize(c3) === 1 && listClaims(c3)[0] === "y");
+
+// 4) 幂等: 重复 add 同路径不膨胀
+const c4 = createClaims({ max: 50, ttlMs: 60000 });
+addClaim(c4, "p"); addClaim(c4, "p"); addClaim(c4, "p");
+ck("re-add same path idempotent (size=1, got " + claimsSize(c4) + ")", claimsSize(c4) === 1);
+
+if (fails === 0) { console.log("CLAIMS ALL PASS"); process.exit(0); }
+process.exit(1);
+"@ | Set-Content -Path $claimsNode -Encoding UTF8
+    & $nodeExe $claimsNode
+    $f2a = $LASTEXITCODE
+    & $nodeExe $claimsNode
+    $f2b = $LASTEXITCODE
+    Check "F2 claims 治理 4 项单测 exit=0 (两遍 $f2a/$f2b 一致)" ($f2a -eq 0 -and $f2b -eq 0)
+
     # ── 4) close-gate: 三全 PASS; 缺飞轮留痕 FAIL ──
     $accFile = Join-Path $work "acceptance.md"
     Set-Content -Path $accFile -Value "验收员 A: PASS(对照验收完成)`n验收员 B: PASS(红队复跑探针完成)" -Encoding UTF8
