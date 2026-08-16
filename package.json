@@ -5,6 +5,10 @@
   "main": "lib/index.js",
   "type": "module",
   "files": ["lib", "scripts", "store", "SKILL.md", "cordis.patch.yml"],
+  "scripts": {
+    "check-sync": "node scripts/check-sync.mjs",
+    "prepublishOnly": "node scripts/check-sync.mjs"
+  },
   "keywords": ["dsh", "dsh-plugin", "deepseek-harness", "agent-memory", "flywheel", "experience", "gate", "verification"],
   "dsh": { "bundle": { "patch": "./cordis.patch.yml" } },
   "dependencies": {}

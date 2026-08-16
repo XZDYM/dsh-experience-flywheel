@@ -1,4 +1,4 @@
-﻿node_modules/
+node_modules/
 logs/
 acceptance/
 store/patterns/mem_*.md
@@ -7,3 +7,8 @@ store/preferences/
 store/experiences/
 *.log
 .DS_Store
+
+# plugin dev backups — never commit
+lib/*.pre-fix-*
+lib/*.bak-*
+lib/*.bak-*.*

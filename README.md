@@ -26,6 +26,10 @@ experience query every turn **without the model choosing to**, the same seam
   `claimsTtlMs` (default 24h), so long sessions never re-verify history forever. Claimed
   paths are extracted by tool-name whitelist + path-shape checks (`extractClaimedPaths`),
   so non-write tools (e.g. browser element refs) never trigger false-positive verifies.
+- **Session-safety (F4)**: injected plugin messages carry a UUID `message.id` (local
+  `createUserMessage` factory mirroring `@deepseek-ai/dsh-llm`), because DSH session
+  events of type `user/message` must satisfy `assertMessageEventShape` (data.message.id
+  required, dsh-session lib/index.js:1248) — bare messages corrupt the whole session log.
 - slash commands `/flywheel-search` `/flywheel-remember` `/plan-gate` `/close-gate` `/verify` wrap exit-1 scripts.
 - **Backend**: local markdown folder by default (zero deps); set `OPENVIKING_URL` to upgrade to vector retrieval.
 - **Honest limit (软硬)**: rc.6 event listeners that throw are warned, not fatal — a true

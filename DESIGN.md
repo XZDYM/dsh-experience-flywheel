@@ -154,6 +154,7 @@ class OpenVikingStore // POST /api/v1/search/search；remember 走 content/write
 - [x] git push + topic dsh-plugin（已发布 v0.1.0，commit 37a0307）
 - [x] **F2 claims 治理**（2026-08-16 收尾迭代）：lib/claims.js 纯函数 + index.js 接入 + 探针 §3d 单测 4 项 → 12/12 PASS，已随 v0.1.0+ 提交
 - [x] **F3 claimed-paths 假阳性修复**（2026-08-16 dogfood 迭代）：extractClaimedPaths 工具名白名单 + 形状校验 + 探针 §3e 单测 8 项 → 13/13 PASS
+- [x] **F4 session-safety message-id factory**（2026-08-16 会话损坏根因修）：本地工厂块 MessageId/deepFreeze/freezeMessage/createMessage/createUserMessage（复刻 @deepseek-ai/dsh-llm lib/types/message.js），pluginMessage 改用 createUserMessage 自动 mint UUID id —— 修 user/message 事件缺 data.message.id 导致 dsh-session assertMessageEventShape 拒载、整会话损坏（mem_dsh_20260816_plugin_user_message_missing_id）。配套探针 test/probe-plugin-id.js 15 项 + probe-dev-installed-consistency.mjs 双端 SHA256 一致性 + scripts/check-sync.mjs 发布前同步检查钩子（prepublishOnly）。R-01 双验收 A=PASS/B=PASS（高置信度）
 
 ## 10b. 安装探针实战结论（2026-08-16，真实踩坑记录）
 
