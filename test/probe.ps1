@@ -122,6 +122,43 @@ process.exit(1);
     $f2b = $LASTEXITCODE
     Check "F2 claims 治理 4 项单测 exit=0 (两遍 $f2a/$f2b 一致)" ($f2a -eq 0 -and $f2b -eq 0)
 
+    # ── 3e) F3 回归: extractClaimedPaths 工具名白名单 + 形状校验 ──
+    # dogfood 真坑: browser_click target=f1e84 被误收成文件路径 → verify 假阳性。
+    $claimsNode3e = Join-Path $work "claims-extract-probe.mjs"
+    @"
+import { extractClaimedPaths } from "file:///$(($root -replace '\\','/'))/lib/claims.js";
+let fails = 0;
+const ck = (label, ok) => { if (!ok) { console.error("EXTRACT-FAIL: " + label); fails++; } };
+const j = (a) => JSON.stringify(a);
+
+// 1) 非写盘工具（Playwright 等）→ 一律不收，即使有 target/source
+ck("browser_click target=ref rejected", j(extractClaimedPaths({ name: "browser_click", arguments: { target: "f1e84" } })) === "[]");
+ck("browser_type path-looking arg rejected (tool gate)", j(extractClaimedPaths({ name: "browser_type", arguments: { target: "C:\\x.md" } })) === "[]");
+
+// 2) 写盘工具 + 明确路径 key → 收
+ck("edit file_path collected", j(extractClaimedPaths({ name: "edit", arguments: { file_path: "F:\\a.md" } })) === j(["F:\\a.md"]));
+ck("mcp__filesystem__write_file path collected", j(extractClaimedPaths({ name: "mcp__filesystem__write_file", arguments: { path: "F:\\b.txt" } })) === j(["F:\\b.txt"]));
+
+// 3) 写盘工具 + 模糊 key(target/source) → 形状校验: 真路径收, ref 不收
+//    (结果按 PATH_KEYS 顺序输出, 顺序无意义 → 排序后比较)
+const s = (a) => j([...a].sort());
+ck("move source real path collected", s(extractClaimedPaths({ name: "mcp__filesystem__move_file", arguments: { source: "F:\\src.md", destination: "F:\\dst.md" } })) === s(["F:\\src.md", "F:\\dst.md"]));
+ck("move target ref rejected", j(extractClaimedPaths({ name: "move_file", arguments: { target: "f1e84" } })) === "[]");
+ck("write target ref rejected", j(extractClaimedPaths({ name: "write", arguments: { target: "f1e107" } })) === "[]");
+ck("write relative ./x.md collected", j(extractClaimedPaths({ name: "write", arguments: { path: "./x.md" } })) === j(["./x.md"]));
+
+// 4) 无参数/空 → 空
+ck("empty exec rejected", j(extractClaimedPaths({ name: "edit", arguments: {} })) === "[]");
+
+if (fails === 0) { console.log("EXTRACT ALL PASS"); process.exit(0); }
+process.exit(1);
+"@ | Set-Content -Path $claimsNode3e -Encoding UTF8
+    & $nodeExe $claimsNode3e
+    $f3a = $LASTEXITCODE
+    & $nodeExe $claimsNode3e
+    $f3b = $LASTEXITCODE
+    Check "F3 extractClaimedPaths 8 项单测 exit=0 (两遍 $f3a/$f3b 一致)" ($f3a -eq 0 -and $f3b -eq 0)
+
     # ── 4) close-gate: 三全 PASS; 缺飞轮留痕 FAIL ──
     $accFile = Join-Path $work "acceptance.md"
     Set-Content -Path $accFile -Value "验收员 A: PASS(对照验收完成)`n验收员 B: PASS(红队复跑探针完成)" -Encoding UTF8

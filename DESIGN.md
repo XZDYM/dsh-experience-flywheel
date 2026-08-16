@@ -153,6 +153,7 @@ class OpenVikingStore // POST /api/v1/search/search；remember 走 content/write
 - [x] team-close-gate + 插件 close-gate 双 PASS + verify-claims PASS
 - [x] git push + topic dsh-plugin（已发布 v0.1.0，commit 37a0307）
 - [x] **F2 claims 治理**（2026-08-16 收尾迭代）：lib/claims.js 纯函数 + index.js 接入 + 探针 §3d 单测 4 项 → 12/12 PASS，已随 v0.1.0+ 提交
+- [x] **F3 claimed-paths 假阳性修复**（2026-08-16 dogfood 迭代）：extractClaimedPaths 工具名白名单 + 形状校验 + 探针 §3e 单测 8 项 → 13/13 PASS
 
 ## 10b. 安装探针实战结论（2026-08-16，真实踩坑记录）
 
@@ -175,6 +176,7 @@ class OpenVikingStore // POST /api/v1/search/search；remember 走 content/write
 第 1 轮红队 FAIL 的 C1/C2/C3/D1/D4 + C4 全部修复并复验通过（行号证据见 acceptance/verdict-B.md）。红队第 2 轮另提 2 条**架构层优化建议**：
 - **F1 搜索子串噪声**：MarkdownStore.search 用 `includes` 子串匹配，bigram 只缓解了查询端；文档端子串命中仍有噪声（"经验"命中"经验库/经验主义"）。后续可选：文档端也建 bigram 交集打分 / nodejieba 分词 / 结构化作弊字段走 OpenViking。
 - **F2 claims 累积不清**：~~claimsByAgent 只增不清，长会话验证集合无限增长、重复校验历史文件~~ → **已修（v0.1.0+）**：抽 `lib/claims.js` 纯函数治理（探针可单测）——verify PASS 后移除已验证路径；上限 `maxClaimsPerAgent`（默认 50，最旧先淘汰）；TTL `claimsTtlMs`（默认 24h，过期清理）。实现见 lib/claims.js + lib/index.js post-execute；回归探针 §3d 单测 4 项（上限/TTL/PASS移除/幂等重加）两遍一致。
+- **F3 claimed-paths 假阳性（dogfood 抓的真坑，2026-08-16）**：~~claimedPaths 的 key 白名单含 `target`/`source`，Playwright MCP 的 browser_click 参数 `target=f1e84`（元素 ref）被误收成文件路径 → 自动 verify 假阳性阻塞（`VERIFY_FAIL exit 1: f1e84;f1e107;f1e85`）~~ → **已修**：`extractClaimedPaths` 抽到 lib/claims.js（纯函数可单测）——**工具名白名单**（仅 write/edit/move/copy/save/upload/create/append/rename/touch/unlink/delete 等写盘工具跟踪，MCP 前缀也能命中）+ **模糊 key 形状校验**（`target`/`source` 必须长得像路径：盘符/分隔符/扩展名/相对前缀）。回归探针 §3e 单测 8 项（非写盘工具拒绝/明确 key 收/模糊 key 形状校验/空参拒绝）两遍一致。
 
 ## 11. 合成谬误 / 分解谬误自检（交付前强制，老李 2026-08-16 拍板）
 
