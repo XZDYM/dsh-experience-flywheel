@@ -30,6 +30,9 @@ experience query every turn **without the model choosing to**, the same seam
   `createUserMessage` factory mirroring `@deepseek-ai/dsh-llm`), because DSH session
   events of type `user/message` must satisfy `assertMessageEventShape` (data.message.id
   required, dsh-session lib/index.js:1248) — bare messages corrupt the whole session log.
+- **Search quality (F1)**: markdown search is word-boundary aware — standalone tokens
+  (独立词) score 1.0, embedded-only matches (e.g. 经验 inside 经验库) are demoted to 0.3,
+  so noisy substring hits rank below precise ones while recall is preserved.
 - slash commands `/flywheel-search` `/flywheel-remember` `/plan-gate` `/close-gate` `/verify` wrap exit-1 scripts.
 - **Backend**: local markdown folder by default (zero deps); set `OPENVIKING_URL` to upgrade to vector retrieval.
 - **Honest limit (软硬)**: rc.6 event listeners that throw are warned, not fatal — a true

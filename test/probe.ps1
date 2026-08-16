@@ -159,6 +159,56 @@ process.exit(1);
     $f3b = $LASTEXITCODE
     Check "F3 extractClaimedPaths 8 项单测 exit=0 (两遍 $f3a/$f3b 一致)" ($f3a -eq 0 -and $f3b -eq 0)
 
+    # ── 3f) F1 回归: search 词边界加权（噪声降权/独立词优先/recall 保持/幂等）──
+    $f1Node = Join-Path $work "f1-search-probe.mjs"
+    @"
+import { MarkdownStore, tokenize } from "file:///$(($root -replace '\\','/'))/lib/store.js";
+import { mkdtemp, writeFile, mkdir } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+let fails = 0;
+const ck = (label, ok) => { if (!ok) { console.error("F1-FAIL: " + label); fails++; } };
+
+const d = await mkdtemp(join(tmpdir(), "f1-"));
+await mkdir(join(d, "patterns"));
+// noise: 只有"经验库"(嵌入), 无独立"经验"
+await writeFile(join(d, "patterns", "mem_noise.md"), "【坑】经验库中文检索回归。教训:经验二字必须可检索。", "utf8");
+// precise: 独立"经验"
+await writeFile(join(d, "patterns", "mem_precise.md"), "【坑】经验 必须 主动 沉淀。", "utf8");
+const s = new MarkdownStore(d);
+
+// 1) tokenize 契约不变
+ck("tokenize 经验 -> [经验]", JSON.stringify(tokenize("经验")) === JSON.stringify(["经验"]));
+ck("tokenize 经验库 -> [经验,验库]", JSON.stringify(tokenize("经验库")) === JSON.stringify(["经验","验库"]));
+
+// 2) 查"经验": 独立词文档 score=1.0 排第一; 噪声文档降权 < 1.0 但仍在结果(recall 保持)
+//    (store 的 name 已剥 mem_ 前缀 → 断言用 precise/noise)
+const r1 = await s.search("经验", 5);
+ck("precise 排第一 (got " + (r1[0]?.name ?? "none") + ")", r1[0]?.name === "precise");
+ck("precise score=1.0 (got " + r1[0]?.score + ")", r1[0]?.score === 1);
+ck("noise 降权 < 0.5 (got " + (r1[1]?.score ?? "none") + ")", r1[1]?.name === "noise" && r1[1].score < 0.5);
+ck("noise 仍在结果 (recall 保持, n=" + r1.length + ")", r1.length === 2);
+
+// 3) 查"经验库": 两篇都命中(recall), 排序不崩
+const r2 = await s.search("经验库", 5);
+ck("经验库 双命中 (n=" + r2.length + ")", r2.length === 2);
+
+// 4) ascii 词边界: "plugin" 不因 "plugins" 误配满分
+const d2 = join(d, "patterns");
+await writeFile(join(d2, "mem_plugin.md"), "the dsh-plugin ecosystem", "utf8");
+await writeFile(join(d2, "mem_plugins.md"), "plugins are separate", "utf8");
+const r3 = await s.search("plugin", 5);
+ck("plugin 独立词排第一 (got " + (r3[0]?.name ?? "none") + ")", r3[0]?.name === "plugin");
+
+if (fails === 0) { console.log("F1 SEARCH ALL PASS"); process.exit(0); }
+process.exit(1);
+"@ | Set-Content -Path $f1Node -Encoding UTF8
+    & $nodeExe $f1Node
+    $f1a = $LASTEXITCODE
+    & $nodeExe $f1Node
+    $f1b = $LASTEXITCODE
+    Check "F1 search 词边界加权 8 项单测 exit=0 (两遍 $f1a/$f1b 一致)" ($f1a -eq 0 -and $f1b -eq 0)
+
     # ── 4) close-gate: 三全 PASS; 缺飞轮留痕 FAIL ──
     $accFile = Join-Path $work "acceptance.md"
     Set-Content -Path $accFile -Value "验收员 A: PASS(对照验收完成)`n验收员 B: PASS(红队复跑探针完成)" -Encoding UTF8

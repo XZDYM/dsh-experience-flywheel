@@ -117,9 +117,11 @@ class OpenVikingStore // POST /api/v1/search/search；remember 走 content/write
 3. ov-remember + ov-search：remember 一条 → search 应命中同名。两遍（第二次同名覆盖）不产生副作用。
 4. D1/D2 回归：中文 bigram 检索命中；零声明（`;;;`）exit 2 防假绿。
 5. F2 回归：claims.js 纯函数单测——上限淘汰最旧 / TTL 清理过期 / PASS 移除已验证 / 重复 add 幂等。两遍一致。
-6. close-gate：三全 PASS；缺飞轮留痕 FAIL。
-7. store 抽象：markdown 后端 search/remember 闭环；OpenViking 后端（若有 URL）同样。
-8. 真实安装探针：在干净临时 profile 里 `dsh plugin add` 本目录 → 启动 → pre-step 注入 system 消息出现。
+6. F3 回归：extractClaimedPaths 单测——非写盘工具拒绝 / 明确 key 收 / 模糊 key 形状校验 / 空参拒绝。两遍一致。
+7. F1 回归：search 词边界加权单测——tokenize 契约 / 独立词排第一 / 噪声降权 / recall 保持 / ASCII 词边界。两遍一致。
+8. close-gate：三全 PASS；缺飞轮留痕 FAIL。
+9. store 抽象：markdown 后端 search/remember 闭环；OpenViking 后端（若有 URL）同样。
+10. 真实安装探针：在干净临时 profile 里 `dsh plugin add` 本目录 → 启动 → pre-step 注入 system 消息出现。
 
 交付前：`verify-claims.ps1` 校核所有声称产物存在；双验收 subagent（A 对照 + B 红队）独立复跑探针。
 
@@ -154,6 +156,7 @@ class OpenVikingStore // POST /api/v1/search/search；remember 走 content/write
 - [x] git push + topic dsh-plugin（已发布 v0.1.0，commit 37a0307）
 - [x] **F2 claims 治理**（2026-08-16 收尾迭代）：lib/claims.js 纯函数 + index.js 接入 + 探针 §3d 单测 4 项 → 12/12 PASS，已随 v0.1.0+ 提交
 - [x] **F3 claimed-paths 假阳性修复**（2026-08-16 dogfood 迭代）：extractClaimedPaths 工具名白名单 + 形状校验 + 探针 §3e 单测 8 项 → 13/13 PASS
+- [x] **F1 搜索去噪**（2026-08-16 dogfood 迭代）：store.js 词边界加权打分（strong=1.0 / weak=0.3，recall 保持）+ 探针 §3f 单测 8 项 → 14/14 PASS
 - [x] **F4 session-safety message-id factory**（2026-08-16 会话损坏根因修）：本地工厂块 MessageId/deepFreeze/freezeMessage/createMessage/createUserMessage（复刻 @deepseek-ai/dsh-llm lib/types/message.js），pluginMessage 改用 createUserMessage 自动 mint UUID id —— 修 user/message 事件缺 data.message.id 导致 dsh-session assertMessageEventShape 拒载、整会话损坏（mem_dsh_20260816_plugin_user_message_missing_id）。配套探针 test/probe-plugin-id.js 15 项 + probe-dev-installed-consistency.mjs 双端 SHA256 一致性 + scripts/check-sync.mjs 发布前同步检查钩子（prepublishOnly）。R-01 双验收 A=PASS/B=PASS（高置信度）
 
 ## 10b. 安装探针实战结论（2026-08-16，真实踩坑记录）
@@ -173,9 +176,9 @@ class OpenVikingStore // POST /api/v1/search/search；remember 走 content/write
 ### 双验收阶段发现（2026-08-16，§11 D2/D4 类）
 7. **verify-claims 零声明假绿**：`-Claims ";;;"`（有效声明数 0）原实现返回 exit 0 "0 项全部验证通过"——假 PASS。已修：声明数 0 → **exit 2**（无内容可校核即参数错误），防 D2/D4 假绿。回归探针仍 9/9 PASS。
 
-### 双验收第 2 轮（2026-08-16）——双 PASS 达成，附 2 条后续优化（F2 已修，F1 待办）
+### 双验收第 2 轮（2026-08-16）——双 PASS 达成，附 2 条后续优化（F1/F2 已修，F3 dogfood 追加）
 第 1 轮红队 FAIL 的 C1/C2/C3/D1/D4 + C4 全部修复并复验通过（行号证据见 acceptance/verdict-B.md）。红队第 2 轮另提 2 条**架构层优化建议**：
-- **F1 搜索子串噪声**：MarkdownStore.search 用 `includes` 子串匹配，bigram 只缓解了查询端；文档端子串命中仍有噪声（"经验"命中"经验库/经验主义"）。后续可选：文档端也建 bigram 交集打分 / nodejieba 分词 / 结构化作弊字段走 OpenViking。
+- **F1 搜索子串噪声**：~~MarkdownStore.search 用 `includes` 子串匹配，bigram 只缓解了查询端；文档端子串命中仍有噪声（"经验"命中"经验库/经验主义"）~~ → **已修（v0.1.0+）**：**词边界加权打分**（零依赖，接口不变）——查询 token 在文档中按边界判定 strong/weak：CJK bigram 看前后是否 CJK 字符、ASCII 词看词字符边界；独立出现（两侧都是边界）计 strong=1.0，仅嵌入出现（如"经验"嵌在"经验库"里）计 weak=0.3。score=(strong+0.3×weakOnly)/tokenCount，**recall 保持**（弱命中仍入结果）但噪声文档排序降权。实现见 lib/store.js `tokenHits` + `search`；回归探针 §3f 单测 8 项（tokenize 契约/独立词排第一/噪声降权/recall 保持/ASCII 词边界）两遍一致。
 - **F2 claims 累积不清**：~~claimsByAgent 只增不清，长会话验证集合无限增长、重复校验历史文件~~ → **已修（v0.1.0+）**：抽 `lib/claims.js` 纯函数治理（探针可单测）——verify PASS 后移除已验证路径；上限 `maxClaimsPerAgent`（默认 50，最旧先淘汰）；TTL `claimsTtlMs`（默认 24h，过期清理）。实现见 lib/claims.js + lib/index.js post-execute；回归探针 §3d 单测 4 项（上限/TTL/PASS移除/幂等重加）两遍一致。
 - **F3 claimed-paths 假阳性（dogfood 抓的真坑，2026-08-16）**：~~claimedPaths 的 key 白名单含 `target`/`source`，Playwright MCP 的 browser_click 参数 `target=f1e84`（元素 ref）被误收成文件路径 → 自动 verify 假阳性阻塞（`VERIFY_FAIL exit 1: f1e84;f1e107;f1e85`）~~ → **已修**：`extractClaimedPaths` 抽到 lib/claims.js（纯函数可单测）——**工具名白名单**（仅 write/edit/move/copy/save/upload/create/append/rename/touch/unlink/delete 等写盘工具跟踪，MCP 前缀也能命中）+ **模糊 key 形状校验**（`target`/`source` 必须长得像路径：盘符/分隔符/扩展名/相对前缀）。回归探针 §3e 单测 8 项（非写盘工具拒绝/明确 key 收/模糊 key 形状校验/空参拒绝）两遍一致。
 
